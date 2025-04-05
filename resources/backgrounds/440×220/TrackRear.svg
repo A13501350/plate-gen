@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="220" viewBox="0 0 440 220">
+
+    <defs>
+
+        <!-- 车牌孔组件 -->
+        <g id="license-hole" fill="black">
+            <path d="   M 0 2 
+                        a 4 4 0 0 1 0 -8 
+                        h 15 
+                        a 4 4 0 0 1 0 8 
+                        h -15 z" />
+        </g>
+
+        <!-- 遮罩：在孔位置挖空 -->
+        <mask id="hole-mask">
+            <rect width="440" height="220" fill="white" rx="10" ry="10" />
+            <!-- 车牌孔遮罩 -->
+            <g>
+                <use href="#license-hole" x="85" y="12.5" fill="white"/>
+                <use href="#license-hole" x="340" y="12.5" fill="white"/>
+                <use href="#license-hole" x="85" y="207.5" fill="white"/>
+                <use href="#license-hole" x="340" y="207.5" fill="white"/>
+            </g>
+        </mask>
+    </defs>
+
+    <!-- 背景矩形 -->
+    <rect id="background" width="440" height="220" fill="#fec210" rx="10" ry="10"
+        mask="url(#hole-mask)" />
+
+    <!-- 边框 -->
+    <rect id="border" x="1.5" y="1.5" width="437" height="217" fill="none" stroke="black" stroke-width="1.5" rx="8.5" ry="8.5" />
+
+    <circle id="separator" cx="220" cy="44.5" r="5" fill="black" />
+
+</svg>

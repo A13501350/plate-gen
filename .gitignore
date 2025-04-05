@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual Environment
+myvenv/
+
+# IDE
+.vscode/
+.idea/
+
+# Output files
+output.svg
+outputs/
+
+# Test files
+.pytest_cache/
+
+# System files
+.DS_Store
+Thumbs.db
