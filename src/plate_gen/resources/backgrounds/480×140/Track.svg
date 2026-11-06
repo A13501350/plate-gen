@@ -29,18 +29,28 @@
      inkscape:window-y="-11"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg17" /><defs
-     id="defs6"><!-- 渐变绿色背景 --><linearGradient
-       id="greenGradient"
+     id="defs6"><!-- 黄绿双拼背景：由同目录 Car.svg（小型新能源渐变绿底）派生，
+  左侧 0–28.33% 取黄底色 #fec210，右侧沿用 Car.svg 渐变绿的终色 rgb(123,200,132)。
+  分界位置取自公安部交通管理局 2016-11-21 发布的大型新能源汽车号牌官方样例图，
+  按牌宽 480mm 标定实测黄绿分界约 136mm（28.3%），与各地公交实拍描述（黄底仅覆盖
+  省简称与发牌机关代号、分界落在圆形专用标识处）一致。 --><linearGradient
+       id="yellowGreenGradient"
        x1="0%"
        y1="0%"
-       x2="0%"
-       y2="100%"><stop
+       x2="100%"
+       y2="0%"><stop
          offset="0%"
-         style="stop-color:white;stop-opacity:1"
-         id="stop1" /><stop
+         style="stop-color:#fec210;stop-opacity:1"
+         id="stopYellowStart" /><stop
+         offset="28.33%"
+         style="stop-color:#fec210;stop-opacity:1"
+         id="stopYellowEnd" /><stop
+         offset="28.33%"
+         style="stop-color:rgb(123,200,132);stop-opacity:1"
+         id="stopGreenStart" /><stop
          offset="100%"
          style="stop-color:rgb(123,200,132);stop-opacity:1"
-         id="stop2" /></linearGradient><!-- 车牌孔组件 --><g
+         id="stopGreenEnd" /></linearGradient><!-- 车牌孔组件 --><g
        id="license-hole"
        fill="none"
        stroke="black"
@@ -87,7 +97,7 @@
          id="rect1" /><!-- 右对齐，宽度=弓形高度 --></clipPath></defs><!-- 应用遮罩的背景矩形 --><rect
      width="480"
      height="140"
-     fill="url(#greenGradient)"
+     fill="url(#yellowGreenGradient)"
      stroke="black"
      stroke-width="0.5"
      rx="10"

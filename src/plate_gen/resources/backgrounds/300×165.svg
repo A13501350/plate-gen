@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="165" viewBox="0 0 300 165">
+
+    <defs>
+        <!-- 遮罩：在孔位置挖空 -->
+        <mask id="hole-mask">
+            <rect width="300" height="165" fill="white" rx="10" ry="10" />
+            <circle cx="25" cy="12.5" r="3.5" />
+            <circle cx="275" cy="12.5" r="3.5" />
+        </mask>
+    </defs>
+
+    <!-- 背景矩形 -->
+    <rect id="background" width="300" height="165" fill="#fec210" rx="10" ry="10"
+        mask="url(#hole-mask)" />
+
+    <!-- 边框 -->
+    <rect id="border" x="2" y="2" width="296" height="161" fill="none" stroke="black" stroke-width="2" rx="8" ry="8" />
+
+    <circle id="separator" cx="88" cy="82.5" r="5" fill="black" />
+
+</svg>

@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plate-gen"
+version = "1.0.0"
+description = "生成符合 GA 36-2018 的中国机动车号牌 SVG 图像"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "plate-gen contributors" }]
+license = { text = "MIT" }
+keywords = ["license-plate", "svg", "china", "GA36-2018"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics",
+]
+dependencies = [
+    "lxml>=4.9",
+    "svgutils>=0.3.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-mock>=3.14",
+]
+
+[project.scripts]
+plate-gen = "plate_gen.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+plate_gen = [
+    "resources/backgrounds/*.svg",
+    "resources/backgrounds/**/*.svg",
+    "resources/fonts/*/*.svg",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"

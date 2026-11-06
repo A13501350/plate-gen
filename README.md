@@ -1,251 +1,216 @@
-# 车牌生成工具 (plate-gen) 项目文档
+# plate-gen
 
-## 1. 引言
+生成符合 GA 36-2018 的中国机动车号牌 SVG 图像。既可作为命令行工具使用，也可作为 Python 库集成到论文配图、测试数据生成等流程中。
 
-### 1.1 项目概述
-
-`plate-gen` 是一个基于 Python 的命令行工具，旨在生成符合中国大陆机动车号牌标准的 SVG 格式图像。用户可以通过指定车牌类型、车辆类型和车牌号码来生成特定的车牌图像，或者让工具根据规则随机生成车牌号码并输出图像。
-
-### 1.2 项目目标
-
-*   **真实性:** 生成的车牌在视觉上尽可能接近真实车牌，包括颜色、字体、布局和尺寸比例。
-*   **规范性:** 遵循相关标准（如 GA 36-2018 中涉及的车牌号码编码规则）生成和验证车牌号码。
-*   **灵活性:** 支持多种常见的车牌类型（普通蓝牌、大型黄牌、新能源绿牌、使领馆牌等）和车型。
-*   **可扩展性:** 项目结构清晰，易于添加新的车牌类型或修改现有规则。
-*   **易用性:** 提供简单的命令行接口供用户使用。
-
-### 1.3 技术栈
-
-*   **核心语言:** Python 3.x
-*   **SVG 处理:** `svgutils` (用于组合 SVG 元素), `lxml` (用于解析和修改 SVG XML)
-*   **命令行接口:** `argparse`
-*   **测试框架:** `pytest`
-*   **类型注解:** Python Typing Hints
-
-## 2. 系统架构
-
-项目采用模块化设计，主要包含以下几个核心部分：
-
-1.  **命令行接口 (CLI):** (`cli.py`) 负责接收用户输入参数，调用核心生成器，并处理输出和异常。
-2.  **核心生成器 (Core):** (`core.py`) 包含 `PlateGenerator` 类，是生成车牌 SVG 的核心逻辑单元。它协调配置加载、号码验证、资源查找和 SVG 组装等步骤。
-3.  **车牌配置 (Config):** (`plate_config.py`, `resources/plate_configs.py`, `resources/char_positions.py`) 定义 `PlateConfig` 数据类，管理不同类型车牌的配置信息（尺寸、颜色、字体路径、背景路径、字符位置等），并提供根据车牌类型和车辆类型获取具体配置的逻辑。
-4.  **车牌验证器 (Validator):** (`plate_validator.py`) 负责验证输入的车牌号码是否符合格式规范，并能将合法的车牌号码解析为其组成部分（省份、发牌机关、序号等）。
-5.  **车牌随机生成器 (Randomizer):** (`plate_randomizer.py`) 根据定义的规则随机生成符合规范的车牌号码。
-6.  **类型定义 (Types):** (`plate_types.py`) 使用 `typing` 模块定义了项目中使用的各种类型别名和数据结构，增强代码的可读性和健壮性。
-7.  **异常处理 (Exceptions):** (`exceptions.py`) 定义了项目特定的异常类，用于更精确地处理错误情况。
-8.  **SVG 工具 (Utils):** (`utils/svg_utils.py`) 提供加载、修改（颜色、位置）和操作 SVG 文件（主要是模板文件）的辅助函数。
-9.  **资源文件 (Resources):** (`resources/`) 包含生成车牌所需的 SVG 模板（背景、字符字体）和配置文件。
-
-**交互流程:**
-
-```mermaid
-graph LR
-    A[用户/CLI] --> B(core.PlateGenerator);
-    B -- 1. 解析/验证 --> C(plate_validator.parse_plate_number);
-    C -- 使用 --> D(plate_config.get_plate_category);
-    B -- 2. 获取配置 --> E(plate_config.get_config_by_full_name);
-    E -- 读取 --> F[resources/plate_configs.py];
-    E -- 读取 --> G[resources/char_positions.py];
-    B -- 3. 加载背景模板 --> H(utils.svg_utils.load_svg);
-    H -- 读取 --> I[resources/backgrounds/*.svg];
-    B -- 4. 修改背景 --> J(utils.svg_utils functions);
-    B -- 5. 加载字符 --> K(utils.svg_utils.load_svg);
-    K -- 读取 --> L[resources/fonts/*/*.svg];
-    B -- 6. 修改字符颜色/位置 --> J;
-    B -- 7. 组合SVG --> M(svgutils);
-    B -- 输出 --> A;
-
-    subgraph 随机生成
-        A --> N(cli.py);
-        N -- 调用 --> O(plate_randomizer.PlateRandomizer);
-        O -- 生成号码 --> N;
-        N -- 传递号码 --> B;
-    end
-
-    subgraph 验证与配置
-        C; D; E; F; G;
-    end
-
-    subgraph SVG处理
-        H; I; J; K; L; M;
-    end
-```
-
-## 3. 核心模块详解
-
-### 3.1 `cli.py` - 命令行接口
-
-*   使用 `argparse` 定义命令行参数，包括：
-    *   `--type`: 车牌类型 (必需)
-    *   `--vehicle`: 车辆类型 (必需)
-    *   `--number`: 车牌号码 (可选，不提供则随机生成)
-    *   `--output`: 输出 SVG 文件路径 (默认 `outputs/output.svg`)
-    *   `--resources`: 资源目录路径 (可选，默认 `resources/`)
-    *   `--count`: 随机生成数量 (可选，默认 5，仅在不指定 `--number` 时有效)
-    *   `--debug`: 启用调试日志 (可选)
-*   初始化日志配置 (`logging`)。
-*   实例化 `PlateGenerator`。
-*   根据是否提供 `--number` 参数，决定是生成指定号码的车牌还是调用 `PlateRandomizer` 随机生成多个号码。
-*   调用 `generator.generate()` 生成 SVG 对象。
-*   使用 `svg.save()` 保存 SVG 文件。
-*   捕获并处理可能发生的 `InvalidPlateNumberError`, `ResourceNotFoundError` 等异常。
-
-### 3.2 `core.py` - 核心生成器
-
-*   **`PlateGenerator` 类:**
-    *   `__init__(resource_dir=None)`: 初始化资源目录路径。优先顺序：环境变量 `PLATE_RESOURCES_DIR` > 构造函数参数 `resource_dir` > 默认路径 (`resources/`)。如果目录不存在，抛出 `ResourceNotFoundError`。
-    *   `_get_plate_config(parsed_number)`: 根据 `parse_plate_number` 返回的解析结果，调用 `PlateConfig.get_config_by_full_name` 获取对应的 `PlateConfig` 对象，并确定背景和字体文件的路径。检查资源文件是否存在。
-    *   `_prepare_background(plate_full_name, config, bg_file)`: 加载背景 SVG 模板 (`load_svg`)。根据 `config` 中的颜色信息，调用 `svg_utils` 中的函数 (`set_rect_color`, `set_border_and_separator_color`, `set_separator_position`) 修改背景颜色、边框/分隔符颜色和分隔符位置。特别处理新能源车牌，尝试加载预制的渐变背景 (`Car.svg` 或 `Track.svg`)。
-    *   `_fill_plate_characters(plate_type, parsed_number, font_dir, config)`: 根据解析后的车牌号码 (`parsed_number`) 和字符位置配置 (`config.char_positions`)，加载对应的字符 SVG 文件 (e.g., `京.svg`, `A.svg`, `1.svg`)。调用 `svg_utils.set_path_color` 设置字符颜色，并使用 `moveto` 将字符放置到正确的位置。处理不同车牌类型（普通、使馆、领馆、新能源）的字符布局。
-    *   `generate(plate_type, vehicle, number)`: 公开方法， orchestrates the entire generation process:
-        1.  调用 `plate_validator.parse_plate_number` 验证和解析输入号码。
-        2.  调用 `_get_plate_config` 获取配置。
-        3.  调用 `_prepare_background` 准备背景 SVG。
-        4.  调用 `_fill_plate_characters` 获取所有字符的 SVG 元素列表。
-        5.  使用 `svgutils` 将字符元素添加到背景 SVG 上。
-        6.  返回最终的 `SVGFigure` 对象。
-
-### 3.3 `plate_config.py` - 车牌配置
-
-*   **`PlateConfig` Dataclass:** 存储单个车牌类型的完整配置，包括 `size`, `font_path`, `background_path`, `colors` (字典，如 `{'background': '#RRGGBB', 'text': '#RRGGBB'}`), `char_positions` (字典，包含各部分字符的坐标)。
-*   **`get_plate_category(plate_type, vehicle)`:** 类方法，根据用户输入的 `plate_type` 和 `vehicle` 组合，返回一个内部使用的、更具体的车牌分类名称（如 `'小型新能源'`, `'领馆汽车'`, `'普通'` 等）。这个分类名称用于后续在 `PLATE_CONFIG_MAP` 中查找配置。包含对无效组合的验证逻辑 (e.g., 使馆牌不能是新能源)。
-*   **`get_config_by_full_name(plate_full_name)`:** 类方法，根据 `get_plate_category` 返回的分类名称，从 `resources.plate_configs.PLATE_CONFIG_MAP` 中查找并返回对应的 `PlateConfig` 实例。
-*   **`resources/plate_configs.py`:** 存储 `PLATE_CONFIG_MAP` 字典，将车牌分类名称映射到具体的 `PlateConfig` 实例。
-*   **`resources/char_positions.py`:** 可能存储字符位置的预定义常量或字典，供 `plate_configs.py` 引用。
-
-### 3.4 `plate_validator.py` - 车牌验证器
-
-*   **`PLATE_REGEX_MAP`:** 字典，存储不同车牌分类名称对应的正则表达式，用于初步匹配车牌号格式。
-*   **`validate_embassy_consulate_serial(plate_type, groups)`:** 验证使领馆车牌的外交代码和序号部分的格式。
-*   **`validate_normal_serial(plate_type, groups, special_mark)`:** 验证普通车牌序号部分的字母/数字组合规则（基于 `PlateRandomizer.LETTER_POSITION_RULES` 和 `ENABLED_RULES` 的逻辑，但此处用于验证）和特殊标记（如“警”、“学”）的位置。
-*   **`validate_new_energy_serial(plate_type, plate_category, serial_number)`:** 验证新能源车牌序号的特定规则（长度、首位/末位字母要求、纯电/非纯电字母范围、数字/字母组合）。
-*   **`validate_serial_pattern(serial, enabled_rules)`:** (未在提供的代码片段中直接显示，但被 `validate_normal_serial` 调用) 检查普通车牌序号是否符合 GA36-2018 定义的 16 种字母数字组合模式中的一种。
-*   **`parse_plate_number(plate_type, vehicle, number)`:** 核心验证和解析函数：
-    1.  调用 `PlateConfig.get_plate_category` 获取车牌分类。
-    2.  根据分类从 `PLATE_REGEX_MAP` 获取正则表达式。
-    3.  使用 `re.fullmatch` 进行匹配。
-    4.  如果匹配成功，提取匹配组 (`groups`)。
-    5.  根据车牌分类，调用相应的详细验证函数 (e.g., `validate_embassy_consulate_serial`, `validate_new_energy_serial`, `validate_normal_serial`) 对序号等部分进行规则校验。
-    6.  根据验证结果和车牌类型，构建并返回一个包含解析后各部分的类型化字典 (`ParsedPlateNumber` 的具体子类型，如 `NormalParsedPlateNumber`, `NewEnergyParsedPlateNumber` 等)。
-    7.  如果任何步骤失败（正则不匹配、规则校验失败），则抛出 `InvalidPlateNumberError` 或 `ValueError`。
-
-### 3.5 `plate_randomizer.py` - 车牌随机生成器
-
-*   **常量:** `PROVINCES`, `LETTERS`, `NEW_ENERGY_PURE_ELECTRIC`, `NEW_ENERGY_NON_ELECTRIC`。
-*   **`PlateRandomizer` 类:**
-    *   `LETTER_POSITION_RULES`: 字典，定义了普通蓝牌序号中 16 种字母位置组合规则。
-    *   `ENABLED_RULES`: 字典，指定 4 位和 5 位序号分别启用哪些字母位置规则。
-    *   `RULES`: 字典，包含不同类型（'blue', 'green_small', 'green_large'）随机生成的配置，如省份权重 (`province_weights`) 和基本模式 (`pattern`)。
-    *   `__init__()`: 初始化配置。
-    *   `_generate_serial_by_rule(length)`: 根据 `LETTER_POSITION_RULES` 和 `ENABLED_RULES` 随机生成符合规则的 4 位或 5 位普通车牌序号。
-    *   `random_blue()`: 生成随机蓝牌号码（省份+发牌机关+4/5位合规序号）。
-    *   `random_green_small()`: 生成随机小型新能源车牌号码（省份+发牌机关+首字母+数字/字母组合）。
-    *   `random_green_large()`: 生成随机大型新能源车牌号码（省份+发牌机关+数字+末字母）。
-    *   `random_green(is_small=None)`: 随机生成小型或大型新能源车牌。
-    *   `generate(plate_type, count=1)`: 静态方法，批量生成指定类型的随机车牌号码列表。
-
-### 3.6 `plate_types.py` - 类型定义
-
-*   使用 `typing.Literal` 定义了 `PlateType` 和 `VehicleType`，限制了可接受的字符串值。
-*   定义了 `PositionCoord` (坐标元组)。
-*   使用 `typing.TypedDict` 定义了 `CharPositionDict` (字符位置配置) 和各种解析结果的数据结构 (`BaseParsedPlateNumber`, `EmbassyParsedPlateNumber`, `ConsulateParsedPlateNumber`, `NormalParsedPlateNumber`, `NewEnergyParsedPlateNumber`)。
-*   使用 `typing.Union` 定义了 `ParsedPlateNumber`，作为所有解析结果类型的联合。
-*   定义了 `PlateCategoryName`，列出所有内部使用的具体车牌分类名称。
-*   这些类型注解提高了代码的清晰度、可维护性，并有助于静态类型检查。
-
-### 3.7 `exceptions.py` - 异常处理
-
-*   `InvalidPlateNumberError(ValueError)`: 车牌号码格式或内容不符合规范时抛出。
-*   `ResourceNotFoundError(FileNotFoundError)`: 所需的资源文件（SVG 模板、配置文件）未找到时抛出。
-*   `InvalidVehicleComboError(ValueError)`: 用户提供的车牌类型与车辆类型组合无效时抛出。
-*   自定义异常使得错误处理更具针对性。
-
-### 3.8 `utils/svg_utils.py` - SVG 工具
-
-*   `load_svg(svg_path)`: 使用 `lxml` 解析 SVG 文件，并返回 `svgutils.transform.SVGFigure` 对象。处理了 `huge_tree=True` 以支持复杂的 SVG。
-*   `set_rect_color(svg_figure, fill_color)`: 查找 SVG 中的背景矩形 (`<rect id='background'>` 或备选 XPath)，并设置其 `fill` 属性。使用了命名空间处理。
-*   `set_border_and_separator_color(svg_figure, color)`: 查找边框 (`<rect id='border'>`) 和分隔符 (`<circle id='separator'>`) 元素，并设置其 `stroke` 或 `fill` 颜色。
-*   `set_separator_position(svg_figure, position)`: (在 `core.py` 中被调用，但未在此处显示) 查找分隔符元素并设置其位置 (`cx`, `cy`)。
-*   `set_path_color(svg_figure, color)`: (在 `core.py` 中被调用，但未在此处显示) 查找 SVG 中的所有路径 (`<path>`) 元素，并设置其 `fill` 属性。这主要用于给字符 SVG 上色。
-
-## 4. 资源管理
-
-`resources/` 目录是存放所有生成车牌所需模板和配置的核心位置。
-
-*   **`backgrounds/`:** 存放不同尺寸和类型的车牌背景 SVG 模板。
-    *   `440×140.svg`: 标准小型汽车蓝牌/黄牌尺寸。
-    *   `220×140.svg`: 标准摩托车牌尺寸。
-    *   `480×140/`: 新能源车牌尺寸目录。
-        *   `Car.svg`: 小型新能源渐变背景。
-        *   `Track.svg`: 大型新能源渐变背景。
-    *   其他 SVG 文件可能对应使领馆等特殊牌照的背景。
-*   **`fonts/`:** 存放字符形状的 SVG 文件，按颜色或类型分子目录（如 `blue/`, `green/`, `yellow/`）。每个目录下包含单个字符的 SVG 文件 (e.g., `京.svg`, `A.svg`, `1.svg`)。这些文件只包含字符的路径信息，颜色和位置在 `core.py` 中动态应用。
-*   **`plate_configs.py`:** 定义 `PLATE_CONFIG_MAP`，将内部车牌分类名称映射到 `PlateConfig` 对象，包含尺寸、颜色、使用的背景模板路径、字体目录路径和字符位置信息。
-*   **`char_positions.py`:** 定义不同车牌布局下各字符的精确坐标。
-
-`PlateGenerator` 在初始化时确定资源目录，并在生成过程中根据 `PlateConfig` 加载相应的背景和字符 SVG 模板。
-
-## 5. 标准符合性 (GA 36-2018)
-
-项目在多个方面尝试遵循中国机动车号牌的相关标准，主要体现在：
-
-*   **号码结构与格式:** `plate_validator.py` 中的正则表达式和验证逻辑严格按照不同类型车牌（普通、新能源、使领馆）的号码构成规则进行校验。
-*   **字符集:** 使用 `LETTERS` 常量排除了字母 'I' 和 'O'。新能源号牌的特定字母（D, A, B, C, E, F, G, H, J, K）也在验证和生成中被正确使用。
-*   **普通号牌序号规则:** `plate_randomizer.py` 在生成蓝牌序号时，以及 `plate_validator.py` 在验证时，都考虑了 GA36-2018 中定义的 16 种字母数字组合规则。
-*   **新能源号牌序号规则:** 对小型（首位字母+数字/字母组合）和大型（数字+末位字母）新能源号牌的特殊序号规则进行了实现和验证。
-*   **视觉元素 (部分):**
-    *   **颜色:** `plate_configs.py` 中定义了不同车牌类型的主要背景色和文字颜色（如蓝底白字、黄底黑字、绿底黑字、黑底白字）。
-    *   **布局:** `char_positions.py` 和 `plate_configs.py` 定义了字符的相对位置，包括省份、发牌机关、序号、分隔符等。
-    *   **字体:** 使用 SVG 格式的字体文件来模拟车牌专用字体。
-    *   **尺寸:** `plate_configs.py` 中定义了不同车牌的尺寸（像素单位）。
-    *   **新能源渐变:** `core.py` 中特别处理了新能源车牌，加载预制的渐变背景 SVG。
-
-**注意:** SVG 生成的视觉效果依赖于模板文件的准确性和 `svgutils` 的渲染能力，可能与实际物理车牌存在细微差异。标准的符合性主要集中在号码编码规则和主要的视觉元素上。
-
-## 6. 使用说明
-
-通过命令行执行 `cli.py`：
+## 安装
 
 ```bash
-python cli.py --type <车牌类型> --vehicle <车辆类型> [--number <车牌号码>] [--output <输出路径>] [--resources <资源路径>] [--count <数量>] [--debug]
+pip install -e ".[dev]"
 ```
 
-**示例:**
+要求 Python 3.10+，运行时依赖 `svgutils` 与 `lxml`。
 
-*   生成指定的普通小型汽车车牌：
-    ```bash
-    python cli.py --type 普通 --vehicle 汽车 --number 京A12345 --output plates/京A12345.svg
-    ```
-*   随机生成 10 个小型新能源车牌：
-    ```bash
-    python cli.py --type 普通 --vehicle 新能源 --count 10 --output outputs/new_energy_#.svg  # 注意：输出文件名需要手动处理或修改cli.py以支持模板
-    ```
-*   生成指定的使馆汽车车牌：
-    ```bash
-    python cli.py --type 使馆 --vehicle 汽车 --number 123456使
-    ```
+## 命令行
 
-## 7. 测试
+```bash
+# 查看全部号牌种类（标识、显示名、尺寸、版式、是否支持随机）
+plate-gen --list-categories
 
-项目包含使用 `pytest` 编写的单元测试：
+# 生成指定号码（默认写入 outputs/京A12345.svg）
+plate-gen --category 小型汽车号牌 --number 京A12345
 
-*   `test_plate_config.py`: 测试 `PlateConfig` 类和 `get_plate_category` 等相关功能。
-*   `test_plate_generator.py`: 测试 `PlateGenerator` 的初始化、内部方法和 `generate` 方法，覆盖不同车牌类型和异常情况。使用了 `unittest.mock.patch` 来模拟文件系统操作和依赖项。
-*   `test_plate_validator.py`: 测试 `parse_plate_number` 函数，覆盖各种有效和无效的车牌号码、类型组合以及边界条件。使用了 `@pytest.mark.parametrize` 来测试多种序号模式。
-*   `test_randomizer.py`: 测试 `PlateRandomizer` 生成的号码是否能通过 `plate_validator` 的验证。
+# 也可以用 ASCII 标识
+plate-gen --category small_vehicle --number 京A12345
 
-测试确保了核心逻辑的正确性和代码的健壮性。
+# 随机生成 3 个号码，每个文件以各自号码命名（默认写入 outputs/）
+plate-gen --category 普通摩托车号牌 --count 3
 
-## 8. 总结与展望
+# 显式指定具体文件名（单张时按该名称写入）
+plate-gen --category 小型汽车号牌 --number 京A12345 --output outputs/plate.svg
 
-`plate-gen` 项目成功实现了一个功能相对完善的车牌 SVG 生成工具，能够根据规则生成多种类型的、符合主要标准的中国车牌图像。代码结构清晰，模块化程度高，并配有单元测试。
+# 大型汽车后号牌
+plate-gen --category 大型汽车号牌 --position rear --number 京A12345 --output outputs/rear.svg
 
-**潜在的改进方向:**
+# 等价于 python -m plate_gen
+python -m plate_gen --category large_new_energy --number 京A12345D
+```
 
-*   **更精细的视觉效果:** 引入更复杂的 SVG 特效（如纹理、反光、立体感）以提高真实感。
-*   **配置完善:** 补充或修正 `plate_configs.py` 和 `char_positions.py` 中的数据，确保覆盖所有车牌类型和细节。
-*   **Web 界面:** 开发一个 Web 应用，提供图形化界面进行车牌生成。
-*   **批量输出:** 改进 `cli.py` 以支持更灵活的批量输出文件名模板。
-*   **标准更新:** 跟踪并实现未来可能出现的车牌标准变更。
-*   **性能优化:** 对于大量生成场景，分析并优化 SVG 处理和文件 I/O 性能。
-。
+参数说明：
+
+| 参数 | 说明 |
+|---|---|
+| `--category` | 号牌种类：中文全名或 ASCII 标识；除 `--list-categories` 外必填 |
+| `--list-categories` | 列出全部种类，不需要其他参数 |
+| `--number` | 指定号码；省略时按该种类规则随机生成 |
+| `--output` | 输出路径：默认 `outputs`（目录），目录内按号码命名；路径末段带扩展名时视为具体文件 |
+| `--resources` | 自定义资源目录 |
+| `--count` | 随机生成数量，默认 5；指定 `--number` 时忽略 |
+| `--position` | 大型汽车号牌的前/后版式：`front`（默认）/ `rear`；其余种类传 `rear` 返回退出码 2 |
+| `--debug` | 输出调试日志 |
+
+### 输出命名
+
+- **目录语义**（默认 `outputs`、已存在的目录、或路径末段没有扩展名）：文件名取号码本身，扩展名 `.svg`。指定号码时如 `--number 京A12345` → `outputs/京A12345.svg`；批量随机时每个文件以各自号码命名。
+- **字符规范化**：只做最小必要替换。间隔号 `·` 与 Windows 保留字符（`< > : " / \ | ? *`）替换为 `-`；合法号码不含 `-`，因此可由文件名还原号码，不引入哈希或纯序号。
+- **同名冲突**：目标文件已存在，或同一批次出现重复号码时，追加确定性的 `-2`、`-3` 后缀，不覆盖已有文件。
+- **文件语义**（路径末段带扩展名且不是目录）：单张时按该名称写入并尊重用户命名（已有同名文件会被覆盖）；批量时取其父目录，文件仍按号码命名。
+
+资源目录优先级：环境变量 `PLATE_RESOURCES_DIR` > `--resources` > 包内 `resources/`。
+
+退出码：`0` 成功；`1` 资源缺失或未预期错误；`2` 号码/种类/版式不合法。
+
+### 旧参数迁移
+
+旧的 `--type` + `--vehicle` 双轴已删除，按号码中的专用标记或车型直接选择种类：
+
+| 旧 `--type` / `--vehicle` / 标记 | 新 `--category` |
+|---|---|
+| 普通 / 汽车 / 无标记 | `小型汽车号牌` |
+| 普通 / 汽车 / 警 | `警用汽车号牌` |
+| 普通 / 汽车 / 学 | `教练汽车号牌` |
+| 普通 / 汽车 / 港 或 澳 | `港澳入出境车号牌` |
+| 大型 / 汽车 / 无标记 / front | `大型汽车号牌`（`--position front`） |
+| 大型 / 汽车 / 无标记 / rear | `大型汽车号牌`（`--position rear`） |
+| 大型 / 汽车 / 挂 | `挂车号牌` |
+| 普通 / 摩托车 / 无标记 | `普通摩托车号牌` |
+| 普通 / 摩托车 / 警 | `警用摩托车号牌` |
+| 普通 / 摩托车 / 学 | `教练摩托车号牌` |
+| 普通 / 轻便摩托车 / 无标记 | `轻便摩托车号牌` |
+| 普通 / 低速车 / 无标记 | `低速车号牌` |
+| 普通 / 新能源 | `小型新能源汽车号牌` |
+| 大型 / 新能源 | `大型新能源汽车号牌` |
+| 使馆 / 汽车 | `使馆汽车号牌` |
+| 使馆 / 摩托车 | `使馆摩托车号牌` |
+| 领馆 / 汽车 | `领馆汽车号牌` |
+| 领馆 / 摩托车 | `领馆摩托车号牌` |
+
+旧模型中其余 9 个 `(type, vehicle)` 空格不再存在；号码不合规时由 `InvalidPlateNumberError` 报告。
+
+## Python API
+
+```python
+from plate_gen import (
+    PlateCategory,
+    PlateGenerator,
+    PlateRandomizer,
+    get_plate_spec,
+    parse_plate_number,
+    random_numbers,
+)
+
+generator = PlateGenerator()
+generator.render_to_file(PlateCategory.SMALL_VEHICLE, "京A12345", "outputs/plate.svg")
+
+# 大型汽车后号牌：版式由规格表决定（默认 front）
+generator.render_to_file(
+    PlateCategory.LARGE_VEHICLE, "京A12345", "outputs/rear.svg", position="rear"
+)
+
+parsed = parse_plate_number(PlateCategory.CONSULATE_VEHICLE, "京1234B领")
+print(parsed.category.value, parsed.embassy_code, parsed.serial)
+
+numbers = random_numbers(PlateCategory.SMALL_NEW_ENERGY, 10)
+
+spec = get_plate_spec("小型汽车号牌")
+print(spec.variants["default"].size)
+```
+
+随机生成器可注入随机源以复现结果：
+
+```python
+import random
+from plate_gen import PlateCategory, PlateRandomizer
+
+randomizer = PlateRandomizer(random.Random(42))
+print(randomizer.generate(PlateCategory.SMALL_VEHICLE, 3))
+```
+
+公共 API 还包括 `PlateSpec`、`VariantSpec`、`NumberFormat`、`FieldRule`、`Placement`、`get_plate_spec`、`iter_plate_specs`、`PlatePosition` 与异常类。
+
+## 支持的号牌
+
+| 号牌种类 | 标识 | 尺寸 | 配色 |
+|---|---|---|---|
+| 小型汽车号牌 | `small_vehicle` | 440×140 | 蓝底白字 |
+| 大型汽车号牌（前/后） | `large_vehicle` | 440×140 / 440×220 | 黄底黑字，后牌两行 |
+| 警用汽车号牌（前/后） | `police_vehicle` | 440×140 | 白底黑字，红“警” |
+| 教练汽车号牌 | `training_vehicle` | 440×140 | 黄底黑字 |
+| 港澳入出境车号牌 | `hk_macao_vehicle` | 440×140 | 黑底白字 |
+| 普通摩托车号牌 | `normal_motorcycle` | 220×140 | 黄底黑字 |
+| 警用摩托车号牌 | `police_motorcycle` | 220×140 | 白底黑字，红“警” |
+| 教练摩托车号牌 | `training_motorcycle` | 220×140 | 黄底黑字 |
+| 轻便摩托车号牌 | `light_motorcycle` | 220×140 | 蓝底白字 |
+| 低速车号牌 | `low_speed_vehicle` | 300×165 | 黄底黑字 |
+| 挂车号牌 | `trailer` | 440×220 | 黄底黑字 |
+| 使馆汽车号牌 | `embassy_vehicle` | 440×140 | 黑底白字 |
+| 使馆摩托车号牌 | `embassy_motorcycle` | 220×140 | 黑底白字 |
+| 领馆汽车号牌 | `consulate_vehicle` | 440×140 | 黑底白字 |
+| 领馆摩托车号牌 | `consulate_motorcycle` | 220×140 | 黑底白字 |
+| 小型新能源汽车号牌 | `small_new_energy` | 480×140 | 渐变绿底黑字 |
+| 大型新能源汽车号牌（前） | `large_new_energy` | 480×140 | 渐变绿底黑字 |
+| 大型新能源汽车号牌（后） | `large_new_energy` | 480×140 | 黄绿底黑字（左黄右绿） |
+
+号码规则全部是数据：每种号牌在规格里声明字段与逐位置字符类，校验和随机生成共用同一份模板。规则依据 GA 36-2018 表 3（序号位数）、表 4（4/5 位序号的 16 种字母位置组合）、表 5/表 6（新能源 6 位序号），实现见 [numbering.py](src/plate_gen/numbering.py)。
+
+- 表 3 的“4 位或 5 位”是**按号牌类型分列的序号位数**，不是同一块号牌可在 4 位与 5 位之间自由选择：小型/大型汽车、普通/轻便摩托、低速车这类无专用汉字的号牌序号固定 5 位；警/学/挂/港/澳这类带专用汉字的号牌被汉字占去一格，序号固定 4 位。5.9.2 的标题虽为“4 位或 5 位序号使用规则”，正文只规定表 4 的字母位置组合与回收号牌重新启用，并不允许单块号牌留空。
+- 字位总数由式样图固定（440×140、440×220、220×140、300×165 为 7 格，480×140 新能源为 8 格），序号长度不是自由选项，而是“总格数 − 固定字段 − 专用汉字占格”的结果：规格用 `VariantSpec.slots` 与 `mark_slots` 声明，`serial_slots` 由此推导，`PlateSpec` 构造时校验与号码规则一致（见 `serial_length_for_slots`）。
+- 因此**无标记种类必须填满全部序号格**：如 `京A12345`、大型汽车后牌 `京A12345`、摩托 `京A12345`。裸 4 位（如 `京A1234`）在真实号牌上不出现，校验器按编码规则明确拒绝，随机生成也不会产生留空号码；带标记种类则固定为 `京A1234警` 这类 4 位，专用汉字占末格。
+- 使馆汽车/摩托车序号为 3 位数字，领馆汽车/摩托车为 2 位（首位数字、末位可为字母，不用 O、I）。
+- 使馆、领馆号牌的 3 位驻华外交机构编号不在标准附录 A 的发牌机关代号表内，因此 `randomizable=False`，需要 `--number` 指定号码。
+- 省份简称按 5.7/表 2，发牌机关代号按 5.8（A~Z 顺序启用，序号不使用 I、O）。
+
+### 字号、字面框与底板
+
+GA 36-2018 在式样图（图 1~图 19）的尺寸链中给出字节尺寸，6.7.2 规定字符尺寸误差 ±1%。规格表按“摆放”声明 `Placement.box`（字面框宽×高），多行号牌的不同行使用不同字面框：
+
+| 版式 | 字面框 |
+|---|---|
+| 440×140 | 字高 90、字宽 45，纵向上边距 25、字符间距 12；警用前/后号牌同一版式，发牌机关起于 94、警起于 379、间隔符圆心 77（图 1~图 5） |
+| 440×220 后号牌 | 首行 80×60（y=15），序号行 65×110（y=90），序号间距 15（图 6） |
+| 480×140 新能源 | 省简称 45×90，发牌机关与序号 43×90，序号间距 9（图 7/图 8） |
+| 220×140 摩托 | 首行 50×50 与 50×50（y=10，x=45、125，整体居中），序号行 30×60（y=70），间距 10（图 9/图 11/图 12） |
+| 220×140 使馆摩托 | 两行数字 35×48（y=11.5 / 69.5），使 45×90 位于 x=160、上边距 32（图 10） |
+| 300×165 低速车 | 首行 55×45（y=10），序号行 45×90（y=65），间距 12（图 19） |
+
+间隔符圆点按版式单独声明半径（`BackgroundSpec.separator_radius`）：警用汽车前牌 7 mm、后牌 8 mm，警用摩托 7 mm，其余 5 mm（图 4、图 5、图 12 尺寸链；5.11 只规定同色同冲压，未给直径）。
+
+生成器把描摹字形按墨迹边界框归一化到声明的字面框：字高对齐字面高度，超宽字形横向压缩，窄字形居中。因此各颜色字形可以混排。
+
+- `fonts/yellow` 缺少 `澳`、`港`、`警`、`领`、`使`、`学` 六个字形，规格中显式声明回退到 `fonts/blue`；这是**设计内的同形回退**：四套字体由同一人按同一套字形描摹，仅颜色不同。实测（归一化到 45×90 em 框后叠合）：blue↔green 72 个同名字形中位 IoU 1.000（多数路径完全相同）；blue↔yellow 66 个同名字形中位 IoU 0.790、质心偏移中位 0.86 mm（最大 4.30 mm），最差为 桂 0.498、沪 0.500、粤 0.528，平移对齐后中位 0.814、最差 沪 0.585。即数字与字母在描摹误差量级内，复杂汉字有可见差异。补齐 yellow 仍建议用同源裁剪图按原 Potrace 流程补描，不使用其他字体替代。
+- 大型新能源汽车后号牌底板 `backgrounds/480×140/Track.svg` 由同目录 `Car.svg`（渐变绿底）派生：左侧 0–28.33%（136 mm）为黄底 `#fec210`，右侧保留渐变绿终色。标准图 8 在 PDF 中为灰度印刷，读不出分界；136 mm 取自公安部交管局官方样式图按牌宽标定实测，并与乌鲁木齐/郑州/荆州公交实拍文字（黄底仅覆盖省简称与发牌机关、分界落在圆形标识处）互证，属外部证据而非标准条款。
+- 专题矩阵与核对记录见 [plate_spec_matrix.md](doc/plate_spec_matrix.md)，其中列出每项的标准条款、已修正项与推断项。
+
+## 目录结构
+
+```text
+src/plate_gen/
+├── __init__.py          # 公共 API
+├── __main__.py          # python -m plate_gen
+├── cli.py               # argparse 入口
+├── category.py          # PlateCategory 枚举（唯一分类维度）
+├── numbering.py         # 号码字段、逐位置模板、GA36 展开
+├── spec.py              # PlateSpec / VariantSpec 等声明式规格模型
+├── generator.py         # 按规格摆放字符
+├── validator.py         # 按规格解析与校验
+├── randomizer.py        # 按规格随机号码
+├── constants.py         # 省份、字母与 16 条序号规则
+├── types.py             # PlatePosition / ParsedPlate
+├── exceptions.py        # 异常体系
+├── _svg.py              # SVG 底层操作
+├── data/plate_specs.py  # 17 种类、20 版式的规格表
+└── resources/           # 底板模板与字形（随包分发）
+```
+
+## 开发与测试
+
+```bash
+pytest
+```
+
+测试按号牌种类重写：覆盖全部 17 种类与前后版式、非法号码、规格完整性（字段/坐标/资源/字形覆盖）、随机器与 CLI，并在几何层面断言字形字高对齐各自声明的字面框、不越界、同一行内相邻字符不重叠。
+
+> 数据说明：外廓尺寸、颜色、字符尺寸与坐标以 GA 36-2018 表 1、第 5 章式样图（图 1~图 19）与 6.7.2 为准，逐项出处见 [plate_spec_matrix.md](doc/plate_spec_matrix.md)；大型新能源汽车后号牌底板的派生来源与推断比例见上文“字号、字面框与底板”。
+
+## 授权
+
+本项目采用 MIT 许可，完全开源，详见 [LICENSE](LICENSE)。代码可自由使用、修改、分发与商用，保留版权声明与许可文本即可。仓库内的 GA 36-2018 标准文档仅作实现依据引用，其著作权归原发布机构所有。

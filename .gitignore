@@ -21,6 +21,7 @@ outputs/
 
 # Test files
 .pytest_cache/
+.screenshots/
 
 # System files
 .DS_Store
